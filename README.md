@@ -4,10 +4,9 @@ Telegram-бот для генерации и публикации постов �
 
 ---
 
-## 🚀 Установка
+## 🚀 Установка b pfgecr
 
 1. Клонируйте репозиторий:
-```bash
 git clone https://github.com/username/ai-telegram-bot.git
 cd ai-telegram-bot
 
@@ -23,3 +22,4 @@ TELEGRAM_TOKEN=your-telegram-bot-token # получить через BotFather �
 GIGACHAT_TOKEN=your-gigachat-api-key # можно получить прочитав документацию на сайте
 DATABASE_URL=postgresql:user:password # создать локально бд через postgres
 
+5. Запускайте bot.py
