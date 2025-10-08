@@ -1,15 +1,9 @@
-# services/database.py
-
 import psycopg2
 from psycopg2.extras import RealDictCursor
 from config import DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD
 
 conn = None
 
-
-# -------------------------
-# Инициализация базы данных
-# -------------------------
 def init_db():
     global conn
     conn = psycopg2.connect(
@@ -20,7 +14,7 @@ def init_db():
         password=DB_PASSWORD
     )
     cur = conn.cursor()
-    # Создание таблиц
+
     cur.execute("""
     CREATE TABLE IF NOT EXISTS users (
         user_id SERIAL PRIMARY KEY,
@@ -120,6 +114,50 @@ def get_channels_by_name(name):
     cur.close()
     return channels
 
+def delete_channel(user_id: int, channel_name: str) -> bool:
+    """
+    Безопасно удаляет канал пользователя по имени.
+    Удаляет сначала связанные логи и посты, затем сам канал,
+    чтобы не нарушать FK-ограничения.
+    Возвращает True, если канал найден и удалён, False если канал не найден.
+    """
+    cur = conn.cursor(cursor_factory=RealDictCursor)
+
+    cur.execute(
+        "SELECT channel_id FROM channels WHERE user_id = %s AND name = %s",
+        (user_id, channel_name),
+    )
+    row = cur.fetchone()
+    if not row:
+        cur.close()
+        return False
+
+    channel_id = row["channel_id"]
+
+    cur.execute(
+        """
+        DELETE FROM logs
+        WHERE post_id IN (
+            SELECT post_id FROM posts WHERE channel_id = %s
+        )
+        """,
+        (channel_id,),
+    )
+
+    cur.execute(
+        "DELETE FROM posts WHERE channel_id = %s",
+        (channel_id,),
+    )
+
+    cur.execute(
+        "DELETE FROM channels WHERE channel_id = %s",
+        (channel_id,),
+    )
+
+    conn.commit()
+    cur.close()
+    return True
+
 
 # -------------------------
 # Посты
@@ -127,21 +165,18 @@ def get_channels_by_name(name):
 def add_post(channel_id: int, idea_title: str, style_name: str, text: str):
     cur = conn.cursor(cursor_factory=RealDictCursor)
 
-    # --- идея ---
     cur.execute("SELECT idea_id FROM ideas WHERE title=%s", (idea_title,))
     idea = cur.fetchone()
     if not idea:
         cur.execute("INSERT INTO ideas (title) VALUES (%s) RETURNING idea_id", (idea_title,))
         idea = cur.fetchone()
 
-    # --- стиль ---
     cur.execute("SELECT style_id FROM styles WHERE name=%s", (style_name,))
     style = cur.fetchone()
     if not style:
         cur.execute("INSERT INTO styles (name) VALUES (%s) RETURNING style_id", (style_name,))
         style = cur.fetchone()
 
-    # --- пост ---
     cur.execute(
         """
         INSERT INTO posts (channel_id, idea_id, style_id, text)
@@ -156,7 +191,7 @@ def add_post(channel_id: int, idea_title: str, style_name: str, text: str):
     return post
 
 
-def get_last_posts(channel_id: int, limit=10):
+def get_last_posts(channel_id: int, limit=5):
     cur = conn.cursor(cursor_factory=RealDictCursor)
     cur.execute("""
         SELECT p.text, i.title AS idea, s.name AS style, p.published_at
@@ -164,7 +199,7 @@ def get_last_posts(channel_id: int, limit=10):
         LEFT JOIN ideas i ON p.idea_id = i.idea_id
         LEFT JOIN styles s ON p.style_id = s.style_id
         WHERE p.channel_id=%s
-        ORDER BY p.published_at DESC
+        ORDER BY p.published_at DESC, p.post_id DESC
         LIMIT %s
     """, (channel_id, limit))
     posts = cur.fetchall()

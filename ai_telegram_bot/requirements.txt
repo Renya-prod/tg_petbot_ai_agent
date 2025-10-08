@@ -1,5 +1,5 @@
 python-telegram-bot==21.6
-psycopg2-binary
 requests
-httpx
-reportlab
+openai
+aiohttp
+psycopg2-binary
